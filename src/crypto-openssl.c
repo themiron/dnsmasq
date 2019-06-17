@@ -23,10 +23,15 @@
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
-#include <openssl/dsa.h>
 #include <openssl/ecdsa.h>
 #include <openssl/x509.h>
 #include <openssl/err.h>
+
+#if !defined(OPENSSL_NO_DSA) && defined(HAVE_DSA)
+#include <openssl/dsa.h>
+#else
+#undef HAVE_DSA
+#endif
 
 #if !defined(OPENSSL_NO_ENGINE) && !defined(NO_GOST)
 #include <openssl/engine.h>
@@ -56,6 +61,7 @@ static int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d)
   return 1;
 }
 
+#ifdef HAVE_DSA
 static int DSA_set0_pqg(DSA *d, BIGNUM *p, BIGNUM *q, BIGNUM *g)
 {
   BN_set(&d->p, p);
@@ -77,6 +83,7 @@ static int DSA_SIG_set0(DSA_SIG *sig, BIGNUM *r, BIGNUM *s)
   BN_set(&sig->s, s);
   return 1;
 }
+#endif
 
 static int ECDSA_SIG_set0(ECDSA_SIG *sig, BIGNUM *r, BIGNUM *s)
 {
@@ -320,6 +327,7 @@ err:
   return 0;
 }
 
+#ifdef HAVE_DSA
 static int dnsmasq_dsa_verify(struct blockdata *key_data, unsigned int key_len, unsigned char *sig, size_t sig_len,
 			      unsigned char *digest, size_t digest_len, int algo)
 {
@@ -379,6 +387,7 @@ err_rs:
 
   return 0;
 }
+#endif
 
 static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len,
 				unsigned char *sig, size_t sig_len,
@@ -585,8 +594,10 @@ static int (*verify_func(int algo))(struct blockdata *key_data, unsigned int key
     case 1: case 5: case 7: case 8: case 10:
       return dnsmasq_rsa_verify;
 
+#ifdef HAVE_DSA
     case 3: case 6:
       return dnsmasq_dsa_verify;
+#endif
 
 #ifdef HAVE_GOST
     case 12:
@@ -647,9 +658,11 @@ char *algo_digest_name(int algo)
     {
     case 1: return NULL;          /* RSA/MD5 - Must Not Implement.  RFC 6944 para 2.3. */
     case 2: return NULL;          /* Diffie-Hellman */
-    case 3: return SN_sha1;       /* DSA/SHA1 */
+#ifdef HAVE_DSA
+    case 3: return SN_sha1;       /* DSA/SHA1 - Must Not Implement. RFC 8624 para 1.3. */
+    case 6: return SN_sha1;       /* DSA-NSEC3-SHA1 - Must Not Implement. RFC 8624 para 1.3. */
+#endif
     case 5: return SN_sha1;       /* RSA/SHA1 */
-    case 6: return SN_sha1;       /* DSA-NSEC3-SHA1 */
     case 7: return SN_sha1;       /* RSASHA1-NSEC3-SHA1 */
     case 8: return SN_sha256;     /* RSA/SHA-256 */
     case 10: return SN_sha512;    /* RSA/SHA-512 */
