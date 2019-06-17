@@ -16,7 +16,7 @@
 
 #include "dnsmasq.h"
 
-#ifdef HAVE_DNSSEC
+#if defined(HAVE_DNSSEC) && defined(HAVE_NETTLE)
 
 #include <nettle/rsa.h>
 #include <nettle/dsa.h>
@@ -99,7 +99,7 @@ static struct nettle_hash null_hash = {
 };
 
 /* Find pointer to correct hash function in nettle library */
-const struct nettle_hash *hash_find(char *name)
+const void *hash_find(char *name)
 {
   if (!name)
     return NULL;
@@ -129,8 +129,9 @@ const struct nettle_hash *hash_find(char *name)
 }
 
 /* expand ctx and digest memory allocations if necessary and init hash function */
-int hash_init(const struct nettle_hash *hash, void **ctxp, unsigned char **digestp)
+int hash_init(const void *hashv, void **ctxp, unsigned char **digestp)
 {
+  const struct nettle_hash *hash = (const struct nettle_hash *)hashv;
   static void *ctx = NULL;
   static unsigned char *digest = NULL;
   static unsigned int ctx_sz = 0;
@@ -166,6 +167,21 @@ int hash_init(const struct nettle_hash *hash, void **ctxp, unsigned char **diges
   return 1;
 }
   
+void hash_update(const void *hash, void *ctx, size_t length, const unsigned char *src)
+{
+  return ((struct nettle_hash *)hash)->update(ctx, length, src);
+}
+
+void hash_digest(const void *hash, void *ctx, size_t length, unsigned char *dst)
+{
+  return ((struct nettle_hash *)hash)->digest(ctx, length, dst);
+}
+
+size_t hash_length(const void *hash)
+{
+  return ((struct nettle_hash *)hash)->digest_size;
+}
+
 static int dnsmasq_rsa_verify(struct blockdata *key_data, unsigned int key_len, unsigned char *sig, size_t sig_len,
 			      unsigned char *digest, size_t digest_len, int algo)
 {
@@ -455,6 +471,11 @@ char *nsec3_digest_name(int digest)
     case 1: return "sha1";
     default: return NULL;
     }
+}
+
+void crypto_init(void)
+{
+  /* dummy */
 }
 
 #endif

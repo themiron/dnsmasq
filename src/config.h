@@ -185,6 +185,8 @@ RESOLVFILE
 /* #define HAVE_LIBIDN2 */
 /* #define HAVE_CONNTRACK */
 /* #define HAVE_DNSSEC */
+/* #define HAVE_NETTLE */
+/* #define HAVE_OPENSSL */
 
 
 /* Default locations for important system files. */
