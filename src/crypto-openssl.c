@@ -28,10 +28,16 @@
 #include <openssl/x509.h>
 #include <openssl/err.h>
 
+#ifndef OPENSSL_NO_ENGINE
+#include <openssl/engine.h>
+#define USE_GOST
+static ENGINE *gost_engine = NULL;
+static char *gost_hash = NULL;
+#endif
+
 #if OPENSSL_VERSION_NUMBER >= 0x10101000L
 #define USE_EDDSA
 #endif
-#undef USE_GOST
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static void BN_set(BIGNUM **bp, BIGNUM *b)
@@ -434,6 +440,74 @@ err:
   return 0;
 }
 
+#ifdef USE_GOST
+static int dnsmasq_gost_init(void)
+{
+  ENGINE *engine;
+
+  if (!EVP_PKEY_asn1_find_str(NULL, SN_id_GostR3410_2001, -1))
+    {
+      if (!(engine = ENGINE_by_id("gost")))
+	{
+	  ENGINE_load_builtin_engines();
+	  ENGINE_load_dynamic();
+	  if (!(engine = ENGINE_by_id("gost")))
+	    return 0;
+	}
+
+      if (ENGINE_set_default(engine, ENGINE_METHOD_ALL) <= 0 ||
+	  !EVP_PKEY_asn1_find_str(&engine, SN_id_GostR3410_2001, -1))
+	{
+	  ENGINE_finish(engine);
+	  ENGINE_free(engine);
+	  return 0;
+	}
+
+      gost_engine = engine;
+    }
+
+  gost_hash = SN_id_GostR3411_94;
+
+  return 1;
+}
+
+static int dnsmasq_gost_verify(struct blockdata *key_data, unsigned int key_len,
+			       unsigned char *sig, size_t sig_len,
+			       unsigned char *digest, size_t digest_len, int algo)
+{
+  static const unsigned char hdr[37] = {
+    0x30, 0x63, 0x30, 0x1c, 0x06, 0x06, 0x2a, 0x85, 0x03, 0x02, 0x02, 0x13, 0x30,
+    0x12, 0x06, 0x07, 0x2a, 0x85, 0x03, 0x02, 0x02, 0x23, 0x01, 0x06, 0x07, 0x2a,
+    0x85, 0x03, 0x02, 0x02, 0x1e, 0x01, 0x03, 0x43, 0x00, 0x04, 0x40 };
+  static EVP_PKEY *pkey = NULL;
+  static EVP_PKEY_CTX *pkctx = NULL;
+
+  unsigned char keybuf[sizeof(hdr) + 64];
+  const unsigned char *p = keybuf;
+  int r;
+
+  if (key_len != 64 || sig_len != 64)
+    return 0;
+
+  memcpy(keybuf, hdr, sizeof(hdr));
+  if (!blockdata_retrieve(key_data, key_len, keybuf + sizeof(hdr)) ||
+      !d2i_PUBKEY(&pkey, &p, (int)key_len + sizeof(hdr)))
+    return 0;
+
+  if (!pkctx && !(pkctx = EVP_PKEY_CTX_new(pkey, NULL)))
+    return 0;
+
+  if (EVP_PKEY_verify_init(pkctx) <= 0)
+    return 0;
+
+  r = EVP_PKEY_verify(pkctx, sig, sig_len, digest, digest_len);
+
+  EVP_PKEY_CTX_free(pkctx), pkctx = NULL;
+
+  return (r > 0);
+}
+#endif
+
 #ifdef USE_EDDSA
 static int dnsmasq_eddsa_verify(struct blockdata *key_data, unsigned int key_len,
 				unsigned char *sig, size_t sig_len,
@@ -514,6 +588,11 @@ static int (*verify_func(int algo))(struct blockdata *key_data, unsigned int key
     case 3: case 6:
       return dnsmasq_dsa_verify;
 
+#ifdef USE_GOST
+    case 12:
+      return dnsmasq_gost_verify;
+#endif
+
     case 13: case 14:
       return dnsmasq_ecdsa_verify;
 
@@ -554,7 +633,7 @@ char *ds_digest_name(int digest)
     case 1: return SN_sha1;
     case 2: return SN_sha256;
 #ifdef USE_GOST
-    case 3: return SN_id_GostR3411_94;
+    case 3: return gost_hash;
 #endif
     case 4: return SN_sha384;
     default: return NULL;
@@ -575,7 +654,7 @@ char *algo_digest_name(int algo)
     case 8: return SN_sha256;     /* RSA/SHA-256 */
     case 10: return SN_sha512;    /* RSA/SHA-512 */
 #ifdef USE_GOST
-    case 12: return SN_id_GostR3410_2001; /* ECC-GOST */
+    case 12: return gost_hash;    /* ECC-GOST */
 #endif
     case 13: return SN_sha256;    /* ECDSAP256SHA256 */
     case 14: return SN_sha384;    /* ECDSAP384SHA384 */
@@ -654,7 +733,11 @@ void crypto_init(void)
   CRYPTO_set_mem_functions(dnsmasq_malloc,
 			   dnsmasq_realloc,
 			   dnsmasq_free);
-  OpenSSL_add_all_digests();
+  OPENSSL_add_all_algorithms_conf();
+
+#ifdef USE_GOST
+  dnsmasq_gost_init();
+#endif
 }
 
 #endif
