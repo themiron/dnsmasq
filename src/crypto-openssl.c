@@ -28,7 +28,7 @@
 #include <openssl/x509.h>
 #include <openssl/err.h>
 
-#ifndef OPENSSL_NO_ENGINE
+#if !defined(OPENSSL_NO_ENGINE) && !defined(NO_GOST)
 #include <openssl/engine.h>
 #define USE_GOST
 static ENGINE *gost_engine = NULL;

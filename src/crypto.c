@@ -435,7 +435,9 @@ char *ds_digest_name(int digest)
     {
     case 1: return "sha1";
     case 2: return "sha256";
+#ifndef NO_GOST
     case 3: return "gosthash94";
+#endif
     case 4: return "sha384";
     default: return NULL;
     }
@@ -454,7 +456,9 @@ char *algo_digest_name(int algo)
     case 7: return "sha1";        /* RSASHA1-NSEC3-SHA1 */
     case 8: return "sha256";      /* RSA/SHA-256 */
     case 10: return "sha512";     /* RSA/SHA-512 */
+#ifndef NO_GOST
     case 12: return NULL;         /* ECC-GOST */
+#endif
     case 13: return "sha256";     /* ECDSAP256SHA256 */
     case 14: return "sha384";     /* ECDSAP384SHA384 */ 	
     case 15: return "null_hash";  /* ED25519 */
