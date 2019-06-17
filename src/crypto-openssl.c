@@ -30,13 +30,13 @@
 
 #if !defined(OPENSSL_NO_ENGINE) && !defined(NO_GOST)
 #include <openssl/engine.h>
-#define USE_GOST
+#define HAVE_GOST
 static ENGINE *gost_engine = NULL;
 static char *gost_hash = NULL;
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10101000L
-#define USE_EDDSA
+#define HAVE_EDDSA
 #endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -86,7 +86,7 @@ static int ECDSA_SIG_set0(ECDSA_SIG *sig, BIGNUM *r, BIGNUM *s)
 }
 #endif
 
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
 /* Implement a "hash-function" to the nettle API, which simply returns
    the input data, concatenated into a single, statically maintained, buffer.
 
@@ -174,7 +174,7 @@ const void *hash_find(char *name)
   if (!name)
     return NULL;
 
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
   /* We provide a "null" hash which returns the input data as digest. */
   if (strcmp(null_hash.name, name) == 0)
     return &null_hash;
@@ -192,7 +192,7 @@ int hash_init(const void *hash, void **ctxp, unsigned char **digestp)
 
   void *new;
 
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
   if (hash == &null_hash)
       return null_hash_init(ctxp, digestp);
 #endif
@@ -225,7 +225,7 @@ void hash_update(const void *hash, void *ctx, size_t length, const unsigned char
 {
   EVP_MD_CTX *mdctx = (EVP_MD_CTX *)ctx;
 
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
   if (hash == &null_hash)
     return null_hash_update(ctx, length, src);
 #else
@@ -241,7 +241,7 @@ void hash_digest(const void *hash, void *ctx, size_t length, unsigned char *dst)
 
   (void)length;
 
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
   if (hash == &null_hash)
     return null_hash_digest(ctx, length, dst);
 #else
@@ -255,7 +255,7 @@ size_t hash_length(const void *hash)
 {
   const EVP_MD *md = (const EVP_MD *)hash;
 
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
   if (hash == &null_hash)
     return null_hash_length();
 #endif
@@ -440,7 +440,7 @@ err:
   return 0;
 }
 
-#ifdef USE_GOST
+#ifdef HAVE_GOST
 static int dnsmasq_gost_init(void)
 {
   ENGINE *engine;
@@ -508,7 +508,7 @@ static int dnsmasq_gost_verify(struct blockdata *key_data, unsigned int key_len,
 }
 #endif
 
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
 static int dnsmasq_eddsa_verify(struct blockdata *key_data, unsigned int key_len,
 				unsigned char *sig, size_t sig_len,
 				unsigned char *digest, size_t digest_len, int algo)
@@ -588,7 +588,7 @@ static int (*verify_func(int algo))(struct blockdata *key_data, unsigned int key
     case 3: case 6:
       return dnsmasq_dsa_verify;
 
-#ifdef USE_GOST
+#ifdef HAVE_GOST
     case 12:
       return dnsmasq_gost_verify;
 #endif
@@ -596,7 +596,7 @@ static int (*verify_func(int algo))(struct blockdata *key_data, unsigned int key
     case 13: case 14:
       return dnsmasq_ecdsa_verify;
 
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
     case 15: case 16:
       return dnsmasq_eddsa_verify;
 #endif
@@ -632,7 +632,7 @@ char *ds_digest_name(int digest)
     {
     case 1: return SN_sha1;
     case 2: return SN_sha256;
-#ifdef USE_GOST
+#ifdef HAVE_GOST
     case 3: return gost_hash;
 #endif
     case 4: return SN_sha384;
@@ -653,12 +653,12 @@ char *algo_digest_name(int algo)
     case 7: return SN_sha1;       /* RSASHA1-NSEC3-SHA1 */
     case 8: return SN_sha256;     /* RSA/SHA-256 */
     case 10: return SN_sha512;    /* RSA/SHA-512 */
-#ifdef USE_GOST
+#ifdef HAVE_GOST
     case 12: return gost_hash;    /* ECC-GOST */
 #endif
     case 13: return SN_sha256;    /* ECDSAP256SHA256 */
     case 14: return SN_sha384;    /* ECDSAP384SHA384 */
-#ifdef USE_EDDSA
+#ifdef HAVE_EDDSA
     case 15: return "null_hash";  /* ED25519 */
     case 16: return "null_hash";  /* ED448 */
 #endif
@@ -735,7 +735,7 @@ void crypto_init(void)
 			   dnsmasq_free);
   OPENSSL_add_all_algorithms_conf();
 
-#ifdef USE_GOST
+#ifdef HAVE_GOST
   dnsmasq_gost_init();
 #endif
 }
