@@ -734,9 +734,9 @@ static void *dnsmasq_realloc(void *p, size_t size)
 }
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
-static void dnsmasq_free(void *str, const char *file, int line)
+static void dnsmasq_free(void *p, const char *file, int line)
 #else
-static void dnsmasq_free(void *str)
+static void dnsmasq_free(void *p)
 #endif
 {
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
@@ -744,7 +744,7 @@ static void dnsmasq_free(void *str)
   (void)line;
 #endif
 
-  free(str);
+  free(p);
 }
 
 void crypto_init(void)
