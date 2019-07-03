@@ -45,6 +45,9 @@ static char *gost_hash = NULL;
 #endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+#define EVP_MD_CTX_new EVP_MD_CTX_create
+#define EVP_MD_CTX_reset EVP_MD_CTX_cleanup
+
 static void BN_set(BIGNUM **bp, BIGNUM *b)
 {
   if (b != NULL) {
@@ -205,8 +208,8 @@ int hash_init(const void *hash, void **ctxp, unsigned char **digestp)
 #endif
 
   if (mdctx)
-    EVP_MD_CTX_init(mdctx);
-  else if (!(mdctx = EVP_MD_CTX_create()))
+    EVP_MD_CTX_reset(mdctx);
+  else if (!(mdctx = EVP_MD_CTX_new()))
     return 0;
 
   if (EVP_DigestInit_ex(mdctx, md, NULL) == 0)
@@ -566,8 +569,8 @@ static int dnsmasq_eddsa_verify(struct blockdata *key_data, unsigned int key_len
     return 0;
 
   if (mdctx)
-    EVP_MD_CTX_init(mdctx);
-  else if (!(mdctx = EVP_MD_CTX_create()))
+    EVP_MD_CTX_reset(mdctx);
+  else if (!(mdctx = EVP_MD_CTX_new()))
     return 0;
 
   if (EVP_DigestVerifyInit(mdctx, NULL, NULL, NULL, pkey) <= 0)
