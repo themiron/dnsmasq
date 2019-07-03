@@ -259,6 +259,9 @@ void hash_digest(const void *hash, void *ctx, size_t length, unsigned char *dst)
 #endif
 
   EVP_DigestFinal_ex(mdctx, dst, NULL);
+
+  /* hash_name calls update/digest multiple times w/o init */
+  EVP_DigestInit_ex(mdctx, EVP_MD_CTX_md(mdctx), NULL);
 }
 
 size_t hash_length(const void *hash)
