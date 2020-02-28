@@ -25,10 +25,6 @@
 #include <nettle/nettle-meta.h>
 #include <nettle/bignum.h>
 
-#ifdef HAVE_DSA
-#include <nettle/dsa.h>
-#endif
-
 /* Implement a "hash-function" to the nettle API, which simply returns
    the input data, concatenated into a single, statically maintained, buffer.
 
@@ -226,8 +222,6 @@ static int dnsmasq_rsa_verify(struct blockdata *key_data, unsigned int key_len, 
   
   switch (algo)
     {
-    case 1:
-      return nettle_rsa_md5_verify_digest(key, digest, sig_mpz);
     case 5: case 7:
       return nettle_rsa_sha1_verify_digest(key, digest, sig_mpz);
     case 8:
@@ -239,52 +233,6 @@ static int dnsmasq_rsa_verify(struct blockdata *key_data, unsigned int key_len, 
   return 0;
 }  
 
-#ifdef HAVE_DSA
-static int dnsmasq_dsa_verify(struct blockdata *key_data, unsigned int key_len, unsigned char *sig, size_t sig_len,
-			      unsigned char *digest, size_t digest_len, int algo)
-{
-  unsigned char *p;
-  unsigned int t;
-
-  static mpz_t y;
-  static struct dsa_params *params = NULL;
-  static struct dsa_signature *sig_struct;
-  
-  (void)digest_len;
-
-  if (params == NULL)
-    {
-      if (!(sig_struct = whine_malloc(sizeof(struct dsa_signature))) || 
-	  !(params = whine_malloc(sizeof(struct dsa_params)))) 
-	return 0;
-      
-      mpz_init(y);
-      nettle_dsa_params_init(params);
-      nettle_dsa_signature_init(sig_struct);
-    }
-  
-  if ((sig_len < 41) || !(p = blockdata_retrieve(key_data, key_len, NULL)))
-    return 0;
-  
-  t = *p++;
-  
-  if (key_len < (213 + (t * 24)))
-    return 0;
-  
-  mpz_import(params->q, 20, 1, 1, 0, 0, p); p += 20;
-  mpz_import(params->p, 64 + (t*8), 1, 1, 0, 0, p); p += 64 + (t*8);
-  mpz_import(params->g, 64 + (t*8), 1, 1, 0, 0, p); p += 64 + (t*8);
-  mpz_import(y, 64 + (t*8), 1, 1, 0, 0, p); p += 64 + (t*8);
-  
-  mpz_import(sig_struct->r, 20, 1, 1, 0, 0, sig+1);
-  mpz_import(sig_struct->s, 20, 1, 1, 0, 0, sig+21);
-  
-  (void)algo;
-  
-  return nettle_dsa_verify(params, y, digest_len, digest, sig_struct);
-} 
-#endif
- 
 static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len, 
 				unsigned char *sig, size_t sig_len,
 				unsigned char *digest, size_t digest_len, int algo)
@@ -401,14 +349,9 @@ static int (*verify_func(int algo))(struct blockdata *key_data, unsigned int key
   /* This switch defines which sig algorithms we support, can't introspect Nettle for that. */
   switch (algo)
     {
-    case 1: case 5: case 7: case 8: case 10:
+    case 5: case 7: case 8: case 10:
       return dnsmasq_rsa_verify;
       
-#ifdef HAVE_DSA
-    case 3: case 6: 
-      return dnsmasq_dsa_verify;
-#endif
-    
     case 13: case 14:
       return dnsmasq_ecdsa_verify;
 
@@ -461,11 +404,9 @@ char *algo_digest_name(int algo)
     {
     case 1: return NULL;          /* RSA/MD5 - Must Not Implement.  RFC 6944 para 2.3. */
     case 2: return NULL;          /* Diffie-Hellman */
-#ifdef HAVE_DSA
-    case 3: return "sha1";        /* DSA/SHA1 - Must Not Implement. RFC 8624 para 1.3. */
-    case 6: return "sha1";        /* DSA-NSEC3-SHA1 - Must Not Implement. RFC 8624 para 1.3. */
-#endif
+    case 3: return NULL; ;        /* DSA/SHA1 - Must Not Implement. RFC 8624 section 3.1 */ 
     case 5: return "sha1";        /* RSA/SHA1 */
+    case 6: return NULL;          /* DSA-NSEC3-SHA1 - Must Not Implement. RFC 8624 section 3.1 */
     case 7: return "sha1";        /* RSASHA1-NSEC3-SHA1 */
     case 8: return "sha256";      /* RSA/SHA-256 */
     case 10: return "sha512";     /* RSA/SHA-512 */
