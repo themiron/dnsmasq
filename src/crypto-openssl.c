@@ -28,19 +28,19 @@
 #include <openssl/err.h>
 
 #if !defined(OPENSSL_NO_ENGINE) && !defined(NO_GOST)
-#include <openssl/engine.h>
-#define HAVE_GOST
+#  include <openssl/engine.h>
+#  define HAVE_GOST
 static ENGINE *gost_engine = NULL;
 static char *gost_hash = NULL;
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10101000L
-#define HAVE_EDDSA
+#  define HAVE_EDDSA
 #endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-#define EVP_MD_CTX_new EVP_MD_CTX_create
-#define EVP_MD_CTX_reset EVP_MD_CTX_cleanup
+#  define EVP_MD_CTX_new EVP_MD_CTX_create
+#  define EVP_MD_CTX_reset EVP_MD_CTX_cleanup
 
 static void BN_set(BIGNUM **bp, BIGNUM *b)
 {
