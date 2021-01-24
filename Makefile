@@ -55,10 +55,12 @@ ifeq ($(CRYPTO),openssl)
 crypto_pkgs = libcrypto
 crypto_pkg  = libcrypto
 crypto_opt  = -DHAVE_OPENSSL
+crypto_lgmp =
 else
 crypto_pkgs = nettle hogweed
 crypto_pkg  = nettle
 crypto_opt  = -DHAVE_NETTLE
+crypto_lgmp = -lgmp
 endif
 
 dbus_cflags =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DBUS $(PKG_CONFIG) --cflags dbus-1` 
@@ -78,7 +80,7 @@ crypto_cflags = `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC     $(PKG_CO
                 `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_CRYPTOHASH "" --copy $(crypto_opt)`
 crypto_libs =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC     $(PKG_CONFIG) --libs '$(crypto_pkgs)' \
                                                         HAVE_CRYPTOHASH $(PKG_CONFIG) --libs $(crypto_pkg)`
-gmp_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC NO_GMP --copy -lgmp`
+gmp_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC NO_GMP --copy '$(crypto_lgmp)'`
 sunos_libs =    `if uname | grep SunOS >/dev/null 2>&1; then echo -lsocket -lnsl -lposix4; fi`
 version =     -DVERSION='\"`$(top)/bld/get-version $(top)`\"'
 
