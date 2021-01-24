@@ -26,6 +26,9 @@
 #  include <nettle/gostdsa.h>
 #  define HAVE_GOST
 #endif
+#endif
+
+#if (defined(HAVE_DNSSEC) && defined(HAVE_NETTLE)) || defined(HAVE_NETTLEHASH)
 #include <nettle/nettle-meta.h>
 #include <nettle/bignum.h>
 
@@ -169,7 +172,7 @@ int hash_init(const void *hashv, void **ctxp, unsigned char **digestp)
 
   return 1;
 }
-  
+
 void hash_update(const void *hash, void *ctx, size_t length, const unsigned char *src)
 {
   return ((struct nettle_hash *)hash)->update(ctx, length, src);
@@ -184,7 +187,9 @@ size_t hash_length(const void *hash)
 {
   return ((struct nettle_hash *)hash)->digest_size;
 }
-
+#endif
+  
+#if defined(HAVE_DNSSEC) && defined(HAVE_NETTLE)
 static int dnsmasq_rsa_verify(struct blockdata *key_data, unsigned int key_len, unsigned char *sig, size_t sig_len,
 			      unsigned char *digest, size_t digest_len, int algo)
 {
