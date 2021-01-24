@@ -55,12 +55,10 @@ ifeq ($(CRYPTO),openssl)
 crypto_pkgs = libcrypto
 crypto_pkg  = libcrypto
 crypto_opt  = -DHAVE_OPENSSL
-crypto_lgmp =
 else
 crypto_pkgs = nettle hogweed
 crypto_pkg  = nettle
 crypto_opt  = -DHAVE_NETTLE
-crypto_lgmp = -lgmp
 endif
 
 dbus_cflags =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DBUS $(PKG_CONFIG) --cflags dbus-1` 
@@ -75,12 +73,12 @@ ct_libs =       `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_CONNTRACK $(PKG_CON
 lua_cflags =    `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LUASCRIPT $(PKG_CONFIG) --cflags lua5.2` 
 lua_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LUASCRIPT $(PKG_CONFIG) --libs lua5.2` 
 crypto_cflags = `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC     $(PKG_CONFIG) --cflags '$(crypto_pkgs)' \
-                                                        HAVE_CRYPTOHASH $(PKG_CONFIG) --cflags $(crypto_pkg)` \
-                `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC "" --copy $(crypto_opt)` \
-                `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_CRYPTOHASH "" --copy $(crypto_opt)`
+                                                        HAVE_NETTLEHASH $(PKG_CONFIG) --cflags $(crypto_pkg)` \
+                `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC "" --copy $(crypto_opt)`
 crypto_libs =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC     $(PKG_CONFIG) --libs '$(crypto_pkgs)' \
-                                                        HAVE_CRYPTOHASH $(PKG_CONFIG) --libs $(crypto_pkg)`
-gmp_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC NO_GMP --copy '$(crypto_lgmp)'`
+                                                        HAVE_NETTLEHASH $(PKG_CONFIG) --libs $(crypto_pkg)`
+
+gmp_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC NO_GMP --copy -lgmp`
 sunos_libs =    `if uname | grep SunOS >/dev/null 2>&1; then echo -lsocket -lnsl -lposix4; fi`
 version =     -DVERSION='\"`$(top)/bld/get-version $(top)`\"'
 
