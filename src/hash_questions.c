@@ -30,7 +30,7 @@
 
 #if defined(HAVE_DNSSEC) || defined(HAVE_CRYPTOHASH)
 
-static const struct nettle_hash *hash;
+static const void *hash;
 static void *ctx;
 static unsigned char *digest;
 
@@ -39,8 +39,8 @@ void hash_questions_init(void)
   if (!(hash = hash_find("sha256")))
     die(_("Failed to create SHA-256 hash object"), NULL, EC_MISC);
 
-  ctx = safe_malloc(hash->context_size);
-  digest = safe_malloc(hash->digest_size);
+  if (!hash_init(hash, &ctx, &digest))
+    die(_("Failed to create SHA-256 hash object"), NULL, EC_MISC);
 }
 
 unsigned char *hash_questions(struct dns_header *header, size_t plen, char *name)
@@ -48,7 +48,7 @@ unsigned char *hash_questions(struct dns_header *header, size_t plen, char *name
   int q;
   unsigned char *p = (unsigned char *)(header+1);
 
-  hash->init(ctx);
+  hash_init(hash, &ctx, &digest);
 
   for (q = ntohs(header->qdcount); q != 0; q--) 
     {

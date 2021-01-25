@@ -389,11 +389,11 @@ int main (int argc, char **argv)
   
   if (daemon->port != 0)
     {
+      cache_init();
+      blockdata_init();
 #if defined(HAVE_DNSSEC) || defined(HAVE_CRYPTOHASH)
       crypto_init();
 #endif
-      cache_init();
-      blockdata_init();
       hash_questions_init();
     }
 
