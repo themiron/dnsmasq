@@ -21,6 +21,7 @@ static struct frec *lookup_frec_by_query(void *hash, unsigned int flags);
 
 static unsigned short get_id(void);
 static void free_frec(struct frec *f);
+static void query_full(time_t now);
 
 /* Send a UDP packet with its source address set as "source" 
    unless nowild is true, when we just send it with the kernel default */
@@ -309,6 +310,8 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
 #endif
   unsigned int gotname = extract_request(header, plen, daemon->namebuff, NULL);
   unsigned char *oph = find_pseudoheader(header, plen, NULL, NULL, NULL, NULL);
+  int old_src = 0;
+  
   (void)do_bit;
   
   if (header->hb4 & HB4_CD)
@@ -323,19 +326,24 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
 #endif
   
   /* Check for retry on existing query */
-  if (!forward && (forward = lookup_frec_by_query(hash, fwd_flags)))
+  if (forward)
+    old_src = 1;
+  else if ((forward = lookup_frec_by_query(hash, fwd_flags)))
     {
       struct frec_src *src;
-
+      
       for (src = &forward->frec_src; src; src = src->next)
 	if (src->orig_id == ntohs(header->id) && 
 	    sockaddr_isequal(&src->source, udpaddr))
 	  break;
-
-      /* Existing query, but from new source, just add this 
-	 client to the list that will get the reply.*/
-      if (!src)
+      
+      if (src)
+	old_src = 1;
+      else
 	{
+	  /* Existing query, but from new source, just add this 
+	     client to the list that will get the reply.*/
+	  
 	  /* Note whine_malloc() zeros memory. */
 	  if (!daemon->free_frec_src &&
 	      daemon->frec_src_count < daemon->ftabsize &&
@@ -345,9 +353,12 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
 	      daemon->free_frec_src->next = NULL;
 	    }
 	  
-	  /* If we've been spammed with many duplicates, just drop the query. */
+	  /* If we've been spammed with many duplicates, return REFUSED. */
 	  if (!daemon->free_frec_src)
-	    return 0;
+	    {
+	      query_full(now);
+	      goto frec_err;
+	    }
 	  
 	  src = daemon->free_frec_src;
 	  daemon->free_frec_src = src->next;
@@ -359,6 +370,12 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
 	  src->log_id = daemon->log_id;
 	  src->iface = dst_iface;
 	  src->fd = udpfd;
+
+	  /* closely spaced identical queries cannot be a try and a retry, so
+	     it's safe to wait for the reply from the first without
+	     forwarding the second. */
+	  if (difftime(now, forward->time) < 2)
+	    return 0;
 	}
     }
 
@@ -400,10 +417,10 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
 	}
 #endif
 
-      /* retry on existing query, send to all available servers  */
+      /* retry on existing query, from original source. Send to all available servers  */
       domain = forward->sentto->domain;
       forward->sentto->failed_queries++;
-      if (!option_bool(OPT_ORDER))
+      if (!option_bool(OPT_ORDER) && old_src)
 	{
 	  forward->forwardall = 1;
 	  daemon->last_server = NULL;
@@ -617,6 +634,7 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
     }	  
   
   /* could not send on, return empty answer or address if known for whole domain */
+ frec_err:
   if (udpfd != -1)
     {
       plen = setup_reply(header, plen, addrp, flags, daemon->local_ttl);
@@ -1082,7 +1100,7 @@ void reply_query(int fd, time_t now)
 			  
 			  while (1)
 			    {
-			      if (server_test_type(start, domain, type, 0))
+			      if (server_test_type(start, domain, type, SERV_DO_DNSSEC))
 				{
 				  new_server = start;
 				  if (server == start)
@@ -2439,17 +2457,11 @@ struct frec *get_new_frec(time_t now, int *wait, struct frec *force)
   /* none available, calculate time 'till oldest record expires */
   if (!force && count > daemon->ftabsize)
     {
-      static time_t last_log = 0;
-      
       if (oldest && wait)
 	*wait = oldest->time + (time_t)TIMEOUT - now;
       
-      if ((int)difftime(now, last_log) > 5)
-	{
-	  last_log = now;
-	  my_syslog(LOG_WARNING, _("Maximum number of concurrent DNS queries reached (max: %d)"), daemon->ftabsize);
-	}
-
+      query_full(now);
+      
       return NULL;
     }
   
@@ -2459,6 +2471,18 @@ struct frec *get_new_frec(time_t now, int *wait, struct frec *force)
 
   return f; /* OK if malloc fails and this is NULL */
 }
+
+static void query_full(time_t now)
+{
+  static time_t last_log = 0;
+  
+  if ((int)difftime(now, last_log) > 5)
+    {
+      last_log = now;
+      my_syslog(LOG_WARNING, _("Maximum number of concurrent DNS queries reached (max: %d)"), daemon->ftabsize);
+    }
+}
+
 
 static struct frec *lookup_frec(unsigned short id, int fd, void *hash)
 {
@@ -2482,10 +2506,7 @@ static struct frec *lookup_frec(unsigned short id, int fd, void *hash)
 	type = f->sentto->flags & SERV_TYPE;
 	s = f->sentto;
 	do {
-	  if ((type == (s->flags & SERV_TYPE)) &&
-	      (type != SERV_HAS_DOMAIN ||
-	       (s->domain && hostname_isequal(f->sentto->domain, s->domain))) &&
-	      !(s->flags & (SERV_LITERAL_ADDRESS | SERV_LOOP)) &&
+	  if (server_test_type(s, f->sentto->domain, type, 0) &&
 	      s->sfd && s->sfd->fd == fd)
 	    return f;
 	  
