@@ -451,7 +451,4 @@ static char *compile_opts =
 #endif
 "dumpfile";
 
-#endif
-
-
-
+#endif /* defined(HAVE_DHCP) */
