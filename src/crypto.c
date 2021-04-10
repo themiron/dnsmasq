@@ -37,7 +37,7 @@
 #  define HAVE_EDDSA
 #else
 #endif
-#if MIN_VERSION(3, 6)
+#if MIN_VERSION(3, 6) && !defined(NO_GOST)
 #  include <nettle/gostdsa.h>
 #  define HAVE_GOST
 #endif

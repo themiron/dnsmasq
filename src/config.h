@@ -150,6 +150,8 @@ NO_INOTIFY
    with something like "make COPTS=-DNO_SCRIPT" will do the trick.
 NO_GMP
    Don't use and link against libgmp, Useful if nettle is built with --enable-mini-gmp.
+NO_GOST
+   Disable DNSSEC GOST algo support.
 
 LEASEFILE
 CONFFILE
