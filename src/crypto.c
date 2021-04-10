@@ -16,30 +16,34 @@
 
 #include "dnsmasq.h"
 
-#ifdef HAVE_DNSSEC
-
-/* Minimal version of nettle */
-#define MIN_VERSION(major, minor) (NETTLE_VERSION_MAJOR == (major) && NETTLE_VERSION_MINOR >= (minor)) || \
-				  (NETTLE_VERSION_MAJOR > (major))
-
-#include <nettle/rsa.h>
-#include <nettle/ecdsa.h>
-#include <nettle/ecc-curve.h>
-#if !defined(NETTLE_VERSION_MAJOR)
-#define NETTLE_VERSION_MAJOR 2
-#endif
-#if MIN_VERSION(3, 1)
-#include <nettle/eddsa.h>
-#endif
-#if MIN_VERSION(3, 6)
-#  include <nettle/gostdsa.h>
-#endif
-#endif
-
 #if defined(HAVE_DNSSEC) || defined(HAVE_CRYPTOHASH)
 #include <nettle/nettle-meta.h>
 #include <nettle/bignum.h>
 
+/* Minimal version of nettle */
+#if !defined(NETTLE_VERSION_MAJOR)
+#  define NETTLE_VERSION_MAJOR 2
+#  define NETTLE_VERSION_MINOR 0
+#endif
+#define MIN_VERSION(major, minor) ((NETTLE_VERSION_MAJOR == (major) && NETTLE_VERSION_MINOR >= (minor)) || \
+				   (NETTLE_VERSION_MAJOR > (major)))
+
+#ifdef HAVE_DNSSEC
+#include <nettle/rsa.h>
+#include <nettle/ecdsa.h>
+#include <nettle/ecc-curve.h>
+#if MIN_VERSION(3, 1)
+#  include <nettle/eddsa.h>
+#  define HAVE_EDDSA
+#else
+#endif
+#if MIN_VERSION(3, 6)
+#  include <nettle/gostdsa.h>
+#  define HAVE_GOST
+#endif
+#endif /* HAVE_DNSSEC */
+
+#ifdef HAVE_EDDSA
 /* Implement a "hash-function" to the nettle API, which simply returns
    the input data, concatenated into a single, statically maintained, buffer.
 
@@ -92,7 +96,6 @@ static void null_hash_update(void *ctxv, size_t length, const uint8_t *src)
   memcpy(null_hash_buff + ctx->len, src, length);
   ctx->len += length;
 }
- 
 
 static void null_hash_digest(void *ctx, size_t length, uint8_t *dst)
 {
@@ -111,6 +114,7 @@ static struct nettle_hash null_hash = {
   (nettle_hash_update_func *) null_hash_update,
   (nettle_hash_digest_func *) null_hash_digest
 };
+#endif /* HAVE_EDDSA */
 
 /* Find pointer to correct hash function in nettle library */
 const struct nettle_hash *hash_find(char *name)
@@ -118,9 +122,11 @@ const struct nettle_hash *hash_find(char *name)
   if (!name)
     return NULL;
   
+#ifdef HAVE_EDDSA
   /* We provide a "null" hash which returns the input data as digest. */
   if (strcmp(null_hash.name, name) == 0)
     return &null_hash;
+#endif
 
   /* libnettle >= 3.4 provides nettle_lookup_hash() which avoids nasty ABI
      incompatibilities if sizeof(nettle_hashes) changes between library
@@ -308,7 +314,7 @@ static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len
   return nettle_ecdsa_verify(key, digest_len, digest, sig_struct);
 }
 
-#if MIN_VERSION(3, 6)
+#ifdef HAVE_GOST
 static int dnsmasq_gostdsa_verify(struct blockdata *key_data, unsigned int key_len, 
 				  unsigned char *sig, size_t sig_len,
 				  unsigned char *digest, size_t digest_len, int algo)
@@ -347,9 +353,9 @@ static int dnsmasq_gostdsa_verify(struct blockdata *key_data, unsigned int key_l
   
   return nettle_gostdsa_verify(gost_key, digest_len, digest, sig_struct);
 }
-#endif
+#endif /* HAVE_GOST */
 
-#if MIN_VERSION(3, 1)
+#ifdef HAVE_EDDSA
 static int dnsmasq_eddsa_verify(struct blockdata *key_data, unsigned int key_len, 
 				unsigned char *sig, size_t sig_len,
 				unsigned char *digest, size_t digest_len, int algo)
@@ -392,7 +398,7 @@ static int dnsmasq_eddsa_verify(struct blockdata *key_data, unsigned int key_len
 
   return 0;
 }
-#endif
+#endif /* HAVE_EDDSA */
 
 static int (*verify_func(int algo))(struct blockdata *key_data, unsigned int key_len, unsigned char *sig, size_t sig_len,
 			     unsigned char *digest, size_t digest_len, int algo)
@@ -408,14 +414,15 @@ static int (*verify_func(int algo))(struct blockdata *key_data, unsigned int key
     case 5: case 7: case 8: case 10:
       return dnsmasq_rsa_verify;
 
-#if MIN_VERSION(3, 6)
+#ifdef HAVE_GOST
     case 12:
       return dnsmasq_gostdsa_verify;
 #endif
       
     case 13: case 14:
       return dnsmasq_ecdsa_verify;
-#if MIN_VERSION(3, 1)
+
+#ifdef HAVE_EDDSA
     case 15: case 16:
       return dnsmasq_eddsa_verify;
 #endif
@@ -451,7 +458,9 @@ char *ds_digest_name(int digest)
     {
     case 1: return "sha1";
     case 2: return "sha256";
+#ifdef HAVE_GOST
     case 3: return "gosthash94";
+#endif
     case 4: return "sha384";
     default: return NULL;
     }
@@ -470,11 +479,15 @@ char *algo_digest_name(int algo)
     case 7: return "sha1";        /* RSASHA1-NSEC3-SHA1 */
     case 8: return "sha256";      /* RSA/SHA-256 */
     case 10: return "sha512";     /* RSA/SHA-512 */
+#ifdef HAVE_GOST
     case 12: return "gosthash94"; /* ECC-GOST */
+#endif
     case 13: return "sha256";     /* ECDSAP256SHA256 */
     case 14: return "sha384";     /* ECDSAP384SHA384 */ 	
+#ifdef HAVE_EDDSA
     case 15: return "null_hash";  /* ED25519 */
     case 16: return "null_hash";  /* ED448 */
+#endif
     default: return NULL;
     }
 }
@@ -489,4 +502,4 @@ char *nsec3_digest_name(int digest)
     }
 }
 
-#endif
+#endif /* HAVE_DNSSEC */
