@@ -311,26 +311,24 @@ static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len
 				unsigned char *sig, size_t sig_len,
 				unsigned char *digest, size_t digest_len, int algo)
 {
-  static EC_KEY *eckey = NULL;
+  EC_KEY *eckey = NULL;
   static ECDSA_SIG *ecsig = NULL;
   BIGNUM *R, *S;
 
   unsigned char keybuf[256 + 2];
   const unsigned char *p = keybuf;
   unsigned int t;
-  int r;
+  int r, curve;
 
   switch (algo)
     {
     case 13:
-      if (!eckey && !(eckey = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1)))
-        return 0;
+      curve = NID_X9_62_prime256v1;
       t = 32;
       break;
 
     case 14:
-      if (!eckey && !(eckey = EC_KEY_new_by_curve_name(NID_secp384r1)))
-        return 0;
+      curve = NID_secp384r1;
       t = 48;
       break;
 
@@ -346,8 +344,12 @@ static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len
     return 0;
 
   keybuf[0] = POINT_CONVERSION_UNCOMPRESSED;
-  if (!o2i_ECPublicKey(&eckey, &p, (int)key_len + 1))
+  eckey = EC_KEY_new_by_curve_name(curve);
+  if (!eckey)
     return 0;
+
+  if (!o2i_ECPublicKey(&eckey, &p, (int)key_len + 1))
+    goto errkey;
 
   R = BN_bin2bn(sig, t, NULL);
   S = BN_bin2bn(sig + t, t, NULL);
@@ -355,15 +357,14 @@ static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len
     goto err;
 
   r = ECDSA_do_verify(digest, digest_len, ecsig, eckey);
-
-  EC_KEY_free(eckey), eckey = NULL;
-
+  EC_KEY_free(eckey);
   return (r > 0);
 
 err:
   BN_free(R);
   BN_free(S);
-
+errkey:
+  EC_KEY_free(eckey);
   return 0;
 }
 
